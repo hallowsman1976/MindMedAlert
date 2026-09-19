@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <title>ลงทะเบียนญาติ - ระบบนัดรับยา</title>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root{
+      --bg:#FBFBFD; --surface:#FFFFFF; --text:#1D1D1F; --text-2:#6E6E73;
+      --separator:rgba(60,60,67,0.10); --separator-strong:rgba(60,60,67,0.18);
+      --accent:#0071E3; --danger:#FF3B30; --success:#34C759;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --bg:#000000; --surface:#1C1C1E; --text:#F5F5F7; --text-2:#98989D;
+        --separator:rgba(255,255,255,0.12); --separator-strong:rgba(255,255,255,0.2); }
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:'Noto Sans Thai','Prompt',sans-serif; background:var(--bg); color:var(--text);
+      display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px;
+    }
+    .reg-card{ max-width:420px; width:100%; background:var(--surface); border:1px solid var(--separator); border-radius:20px; padding:32px 24px; box-shadow:0 8px 30px rgba(0,0,0,0.08); text-align:center; }
+    .reg-icon{ font-size:44px; color:var(--accent); margin-bottom:14px; }
+    .reg-title{ font-size:18px; font-weight:700; margin-bottom:6px; }
+    .reg-patient-name{ font-size:21px; font-weight:700; color:var(--accent); margin:14px 0; }
+    .reg-desc{ color:var(--text-2); font-size:14px; margin-bottom:20px; line-height:1.7; }
+    .reg-warn{ background:rgba(255,159,10,0.12); color:#FF9F0A; border-radius:10px; padding:10px 12px; font-size:12.5px; margin-bottom:18px; text-align:left; line-height:1.6; }
+    .reg-select{ width:100%; padding:13px 14px; border-radius:12px; border:1px solid var(--separator-strong); font-size:15px; margin-bottom:16px; background:var(--bg); color:var(--text); font-family:inherit; }
+    .reg-btn-line{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; border-radius:12px; background:#06C755; color:#fff; font-weight:600; font-size:15px; border:none; cursor:pointer; font-family:inherit; }
+    .reg-btn-line:disabled{ opacity:0.6; cursor:not-allowed; }
+    .reg-error{ color:var(--danger); font-size:14px; line-height:1.6; }
+    .reg-success-icon{ font-size:54px; color:var(--success); margin-bottom:12px; }
+    .reg-loading{ color:var(--text-2); font-size:14px; }
+  </style>
+</head>
+<body>
+
+<div class="reg-card" id="regCard">
+  <div class="reg-loading"><i class="bi bi-hourglass-split"></i> กำลังตรวจสอบลิงก์...</div>
+</div>
+
+<script>
+/* =========================================================================
+ * ตั้งค่า 2 ค่านี้ให้ตรงกับของจริง:
+ * - GAS_API_URL: URL Apps Script Web App (เอาจากหน้า Admin > ตั้งค่า > Webhook URL
+ *   แต่ตัด "?wh=..." ท้าย URL ออก ใช้แค่ส่วน .../exec)
+ * - LIFF_ID: จาก LINE Developers Console > แชนแนล LINE Login > แท็บ LIFF
+ * ========================================================================= */
+var GAS_API_URL = 'https://script.google.com/macros/s/AKfycbz7cm6jgBUWO1ZIRr9F-02x-wEzfBewRurOag32KrVLRZkShaOLQYb0LDCrtJGr41Vj/exec';
+var LIFF_ID = 'PASTE_YOUR_LIFF_ID_HERE';
+
+var HN = '', SIG = '', patientName = '';
+
+function escapeHtml(s){
+  if(s===null||s===undefined) return '';
+  return String(s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+/** LIFF ห่อ query parameter เดิมไว้ใน liff.state หลัง login redirect ต้องแกะสองชั้น */
+function getEffectiveParams_(){
+  var url = new URL(window.location.href);
+  var params = url.searchParams;
+  var liffState = params.get('liff.state');
+  if(liffState){
+    var inner = new URLSearchParams(liffState.indexOf('?') === 0 ? liffState.slice(1) : liffState);
+    params = inner;
+  }
+  return params;
+}
+
+function apiGet(action, params){
+  var url = new URL(GAS_API_URL);
+  url.searchParams.set('action', action);
+  Object.keys(params||{}).forEach(function(k){ url.searchParams.set(k, params[k]); });
+  return fetch(url.toString()).then(function(r){ return r.json(); });
+}
+
+function apiPost(action, data){
+  var payload = Object.assign({ action: action }, data);
+  return fetch(GAS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); });
+}
+
+function renderCard(html){ document.getElementById('regCard').innerHTML = html; }
+
+function renderError(msg){
+  renderCard(
+    '<div class="reg-icon"><i class="bi bi-exclamation-triangle"></i></div>' +
+    '<div class="reg-title">ไม่สามารถลงทะเบียนได้</div>' +
+    '<div class="reg-error">' + escapeHtml(msg) + '</div>'
+  );
+}
+
+function init(){
+  var p = getEffectiveParams_();
+  HN = p.get('hn') || '';
+  SIG = p.get('sig') || '';
+
+  if(!HN || !SIG){
+    renderError('ลิงก์ไม่ถูกต้อง กรุณาสแกน QR หรือเปิดลิงก์ที่ได้รับจากเจ้าหน้าที่อีกครั้ง');
+    return;
+  }
+  if(!LIFF_ID || LIFF_ID.indexOf('PASTE_') === 0){
+    renderError('ระบบยังไม่ได้ตั้งค่า LINE Login (LIFF_ID) กรุณาแจ้งเจ้าหน้าที่');
+    return;
+  }
+
+  liff.init({ liffId: LIFF_ID }).then(function(){
+    return apiGet('getPatientForRegistration', { hn: HN, sig: SIG });
+  }).then(function(res){
+    if(!res.success){
+      renderError(res.message || 'ลิงก์ไม่ถูกต้องหรือหมดอายุ');
+      return;
+    }
+    patientName = res.data.name;
+    if(!liff.isLoggedIn()){
+      showLoginPrompt();
+    } else {
+      showConfirmForm();
+    }
+  }).catch(function(err){
+    renderError('เริ่มต้นระบบ LINE ไม่สำเร็จ: ' + ((err && err.message) || err));
+  });
+}
+
+function showLoginPrompt(){
+  renderCard(
+    '<div class="reg-icon"><i class="bi bi-person-heart"></i></div>' +
+    '<div class="reg-title">ลงทะเบียนรับแจ้งเตือนนัดรับยา</div>' +
+    '<div class="reg-patient-name">' + escapeHtml(patientName) + '</div>' +
+    '<div class="reg-warn"><i class="bi bi-exclamation-triangle-fill"></i> กรุณาให้ <b>ญาติ/ผู้ดูแลของคนไข้เท่านั้น</b> เป็นผู้สแกน/เข้าสู่ระบบด้วยบัญชี LINE ของตนเอง ห้ามเจ้าหน้าที่สแกนหรือ login แทน เพราะระบบจะผูกบัญชี LINE ที่ login ตอนนี้เข้ากับคนไข้รายนี้ทันที</div>' +
+    '<button class="reg-btn-line" onclick="liff.login()"><i class="bi bi-box-arrow-in-right"></i> เข้าสู่ระบบด้วย LINE</button>'
+  );
+}
+
+function showConfirmForm(){
+  renderCard(
+    '<div class="reg-icon"><i class="bi bi-person-heart"></i></div>' +
+    '<div class="reg-title">ยืนยันการลงทะเบียน</div>' +
+    '<div class="reg-patient-name">' + escapeHtml(patientName) + '</div>' +
+    '<div class="reg-desc">ท่านเกี่ยวข้องกับคนไข้รายนี้อย่างไร</div>' +
+    '<select class="reg-select" id="regRelation">' +
+      '<option value="พ่อ">พ่อ</option>' +
+      '<option value="แม่">แม่</option>' +
+      '<option value="บุตร">บุตร</option>' +
+      '<option value="ญาติ">ญาติ</option>' +
+      '<option value="ผู้ดูแลอื่นๆ">ผู้ดูแลอื่นๆ</option>' +
+    '</select>' +
+    '<button class="reg-btn-line" id="regSubmitBtn" onclick="submitRegistration()"><i class="bi bi-check2-circle"></i> ยืนยันลงทะเบียน</button>'
+  );
+}
+
+function submitRegistration(){
+  var btn = document.getElementById('regSubmitBtn');
+  var relation = document.getElementById('regRelation').value;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังลงทะเบียน...';
+
+  var idToken = null;
+  try { idToken = liff.getIDToken(); } catch(e) {}
+  if(!idToken){
+    renderError('ไม่สามารถดึงข้อมูลยืนยันตัวตนจาก LINE ได้ กรุณาลองใหม่ (ตรวจสอบว่า LIFF app เปิด scope profile และ openid แล้ว)');
+    return;
+  }
+
+  apiPost('registerFamilyMember', { hn: HN, sig: SIG, idToken: idToken, relation: relation })
+    .then(function(res){
+      if(!res.success){
+        renderError(res.message || 'ลงทะเบียนไม่สำเร็จ');
+        return;
+      }
+      var already = res.data && res.data.alreadyRegistered;
+      renderCard(
+        '<div class="reg-success-icon"><i class="bi bi-check-circle-fill"></i></div>' +
+        '<div class="reg-title">' + (already ? 'ท่านลงทะเบียนไว้แล้ว' : 'ลงทะเบียนสำเร็จ') + '</div>' +
+        '<div class="reg-patient-name">' + escapeHtml((res.data && res.data.patientName) || patientName) + '</div>' +
+        '<div class="reg-desc">ท่านจะได้รับแจ้งเตือนนัดรับยาก่อนถึงวันนัดทาง LINE โดยอัตโนมัติ<br>ปิดหน้านี้ได้เลย</div>'
+      );
+    })
+    .catch(function(err){
+      renderError((err && err.message) || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+    });
+}
+
+init();
+</script>
+</body>
+</html>
