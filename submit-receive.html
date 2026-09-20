@@ -6,6 +6,8 @@
   <title>บันทึกการรับยา - ฟอร์มภายนอก</title>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
   <style>
     :root{
       --bg:#FBFBFD; --surface:#FFFFFF; --text:#1D1D1F; --text-2:#6E6E73;
@@ -40,14 +42,16 @@
   <h1><i class="bi bi-capsule-pill"></i> บันทึกการรับยา (ฟอร์มภายนอก)</h1>
 
   <label>HN คนไข้</label>
-  <input id="f_hn" type="text" placeholder="เช่น 000123">
+  <select id="f_hn">
+    <option value="">-- กำลังโหลดรายชื่อคนไข้... --</option>
+  </select>
   <div class="patient-preview" id="patientPreview"></div>
 
   <label>วันที่รับยา</label>
-  <input id="f_date" type="date">
+  <input id="f_date" type="text" placeholder="เลือกวันที่">
 
   <label>วันนัดครั้งถัดไป</label>
-  <input id="f_appointment" type="date">
+  <input id="f_appointment" type="text" placeholder="เลือกวันที่">
 
   <label>ยารับประทาน (เลือกได้หลายรายการ กด Ctrl/Cmd ค้างเพื่อเลือกหลายอัน)</label>
   <select id="f_oral" multiple></select>
@@ -59,6 +63,8 @@
   <div class="msg" id="msgBox"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
 <script>
 /* =========================================================================
  * ตั้งค่า 2 ค่านี้ให้ตรงกับของจริง (ดูได้จากหน้า Admin > ตั้งค่า):
@@ -67,6 +73,8 @@
  * ========================================================================= */
 var GAS_API_URL = 'https://script.google.com/macros/s/AKfycbz7cm6jgBUWO1ZIRr9F-02x-wEzfBewRurOag32KrVLRZkShaOLQYb0LDCrtJGr41Vj/exec';
 var FORM_KEY = '20be2a27186248b7b6399be528907a21';
+
+var patientList = [];
 
 function apiGet(action, params){
   var url = new URL(GAS_API_URL);
@@ -100,23 +108,31 @@ function escapeHtml(s){
   });
 }
 
-var hnCheckTimer = null;
-document.getElementById('f_hn').addEventListener('input', function(){
-  var hn = this.value.trim();
+function loadPatients(){
+  apiGet('getPatientListGateway', { formKey: FORM_KEY }).then(function(res){
+    var sel = document.getElementById('f_hn');
+    if(!res.success){
+      sel.innerHTML = '<option value="">-- โหลดรายชื่อไม่สำเร็จ --</option>';
+      showMsg(false, res.message);
+      return;
+    }
+    patientList = res.data || [];
+    sel.innerHTML = '<option value="">-- เลือก HN คนไข้ --</option>' +
+      patientList.map(function(p){ return '<option value="'+escapeHtml(p.hn)+'">'+escapeHtml(p.hn)+' - '+escapeHtml(p.name)+'</option>'; }).join('');
+  });
+}
+
+document.getElementById('f_hn').addEventListener('change', function(){
+  var hn = this.value;
   var box = document.getElementById('patientPreview');
-  clearTimeout(hnCheckTimer);
   if(!hn){ box.className = 'patient-preview'; return; }
-  hnCheckTimer = setTimeout(function(){
-    apiGet('lookupPatientGateway', { hn: hn, formKey: FORM_KEY }).then(function(res){
-      if(res.success){
-        box.textContent = '✓ ' + res.data.name;
-        box.className = 'patient-preview show';
-      } else {
-        box.textContent = '✗ ' + res.message;
-        box.className = 'patient-preview show err';
-      }
-    });
-  }, 500);
+  var p = patientList.find(function(x){ return x.hn === hn; });
+  if(p){
+    box.textContent = '✓ ' + p.name;
+    box.className = 'patient-preview show';
+  } else {
+    box.className = 'patient-preview';
+  }
 });
 
 function showMsg(ok, text){
@@ -125,14 +141,87 @@ function showMsg(ok, text){
   box.className = 'msg show ' + (ok ? 'ok' : 'err');
 }
 
+/* =========================================================================
+ * Flatpickr แบบแสดงปี พ.ศ. (เก็บค่าจริงเป็น ค.ศ. ISO ส่งไป backend เหมือนเดิม)
+ * โค้ดชุดนี้เหมือนกับที่ใช้ในหน้า Admin (createThaiDatePicker)
+ * ========================================================================= */
+var TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function formatThaiBE(date){
+  if(!date) return '';
+  return date.getDate() + ' ' + TH_MONTHS_SHORT[date.getMonth()] + ' ' + (date.getFullYear()+543);
+}
+function updateYearToBE_(instance){
+  try {
+    var ceYear = instance.currentYear;
+    var beYear = ceYear + 543;
+    var yearInput = instance.calendarContainer.querySelector('.cur-year');
+    if(yearInput && yearInput.tagName === 'INPUT'){
+      yearInput.value = beYear;
+      if(!yearInput._beBound){
+        yearInput._beBound = true;
+        yearInput.addEventListener('input', function(e){
+          var v = parseInt(this.value, 10);
+          if(!isNaN(v) && v > 2400){
+            instance.changeYear(v - 543);
+            setTimeout(function(){ yearInput.value = v; }, 0);
+          }
+        });
+      }
+    }
+    var yearSelect = instance.calendarContainer.querySelector('select.flatpickr-yearDropdown-years');
+    if(yearSelect){
+      Array.from(yearSelect.options).forEach(function(opt){
+        var v = parseInt(opt.value, 10);
+        if(!isNaN(v) && v < 2400) opt.textContent = (v + 543);
+      });
+    }
+  } catch(e) { /* silent */ }
+}
+function createThaiDatePicker(selector, opts){
+  opts = opts || {};
+  var el = (typeof selector === 'string') ? document.querySelector(selector) : selector;
+  if(!el) return null;
+  if(el._flatpickr) el._flatpickr.destroy();
+  var config = {
+    locale: 'th',
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'j M Y',
+    allowInput: false,
+    disableMobile: true,
+    monthSelectorType: 'dropdown',
+    formatDate: function(date, format){
+      if(format === 'j M Y') return formatThaiBE(date);
+      if(format === 'Y-m-d'){
+        var y = date.getFullYear();
+        var m = String(date.getMonth()+1).padStart(2,'0');
+        var d = String(date.getDate()).padStart(2,'0');
+        return y+'-'+m+'-'+d;
+      }
+      return date.toString();
+    },
+    onReady: function(selectedDates, dateStr, instance){ updateYearToBE_(instance); },
+    onMonthChange: function(selectedDates, dateStr, instance){ updateYearToBE_(instance); },
+    onYearChange: function(selectedDates, dateStr, instance){ updateYearToBE_(instance); },
+    onOpen: function(selectedDates, dateStr, instance){ updateYearToBE_(instance); }
+  };
+  if(opts.minDate) config.minDate = opts.minDate;
+  if(opts.maxDate) config.maxDate = opts.maxDate;
+  if(opts.defaultDate) config.defaultDate = opts.defaultDate;
+  return flatpickr(el, config);
+}
+
+var fpDate = createThaiDatePicker('#f_date', { defaultDate: 'today', maxDate: 'today' });
+var fpAppointment = createThaiDatePicker('#f_appointment', { minDate: 'today' });
+
 function submitForm(){
-  var hn = document.getElementById('f_hn').value.trim();
+  var hn = document.getElementById('f_hn').value;
   var date = document.getElementById('f_date').value;
   var appointment = document.getElementById('f_appointment').value;
   var oral = Array.from(document.getElementById('f_oral').selectedOptions).map(function(o){ return o.value; });
   var injected = Array.from(document.getElementById('f_injected').selectedOptions).map(function(o){ return o.value; });
 
-  if(!hn) return showMsg(false, 'กรุณากรอก HN');
+  if(!hn) return showMsg(false, 'กรุณาเลือก HN');
   if(!date) return showMsg(false, 'กรุณาระบุวันที่รับยา');
   if(!appointment) return showMsg(false, 'กรุณาระบุวันนัด');
 
@@ -149,9 +238,9 @@ function submitForm(){
     showMsg(res.success, res.message);
     if(res.success){
       document.getElementById('f_hn').value = '';
-      document.getElementById('f_date').value = '';
-      document.getElementById('f_appointment').value = '';
       document.getElementById('patientPreview').className = 'patient-preview';
+      if(fpDate) fpDate.setDate('today', true);
+      if(fpAppointment) fpAppointment.clear();
     }
   }).catch(function(err){
     btn.disabled = false;
@@ -161,6 +250,7 @@ function submitForm(){
 }
 
 loadDrugs();
+loadPatients();
 </script>
 </body>
 </html>
