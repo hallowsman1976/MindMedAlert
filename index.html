@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>ระบบนัดรับยาต่อเนื่องและแจ้งเตือนผู้รับผิดชอบผ่าน LINE</title>
+  <meta http-equiv="refresh" content="0; url=user.html">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#FBFBFD; --surface:#FFFFFF; --text:#1D1D1F; --text-2:#6E6E73;
+      --separator:rgba(60,60,67,0.10); --accent:#0071E3;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --bg:#000000; --surface:#1C1C1E; --text:#F5F5F7; --text-2:#98989D; --separator:rgba(255,255,255,0.12); }
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:'Noto Sans Thai','Prompt',sans-serif; background:var(--bg); color:var(--text);
+      display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; text-align:center;
+    }
+    .card{ max-width:360px; width:100%; background:var(--surface); border:1px solid var(--separator); border-radius:20px; padding:32px 24px; }
+    .desc{ color:var(--text-2); font-size:14px; margin:14px 0 18px; }
+    a{ color:var(--accent); font-weight:600; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="desc">กำลังพาไปยังหน้าหลัก...</div>
+    <a href="user.html">คลิกที่นี่หากไม่ได้ถูกพาไปอัตโนมัติ</a>
+  </div>
+  <script>window.location.replace('user.html');</script>
+</body>
+</html>
