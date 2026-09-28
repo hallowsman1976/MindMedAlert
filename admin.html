@@ -2114,6 +2114,13 @@ body::before{
           <p class="fs-12 text-muted mt-2 mb-0">คัดลอกค่าทั้งสองไปใส่ในไฟล์ <code>external/submit-receive.html</code> (ตัวแปร <code>GAS_API_URL</code> และ <code>FORM_KEY</code>) ก่อน deploy ขึ้นโฮสต์ภายนอก — Form Key ไม่ใช่รหัสลับจริง (เห็นได้จากโค้ด public) แค่กันบอท/สุ่มยิงเบื้องต้น ข้อมูลที่ส่งเข้ามาทุกรายการต้องรอแอดมินกด "อนุมัติ" ที่หน้ารับยา/นัดก่อนเสมอ</p>
         </div>
 
+        <!-- ===== Admin Account ===== -->
+        <div class="glass-card mb-3">
+          <h3 class="page-title fs-14"><i class="bi bi-shield-lock-fill"></i> บัญชีผู้ดูแลระบบ (Admin)</h3>
+          <p class="fs-12 text-muted mb-2">เปลี่ยนรหัสผ่านสำหรับเข้าสู่ระบบหน้า Admin</p>
+          <button class="btn btn-primary" onclick="changeAdminPassword()"><i class="bi bi-key"></i> เปลี่ยนรหัสผ่าน</button>
+        </div>
+
         <!-- ===== Channel Token ===== -->
         <div class="glass-card mb-3">
           <h3 class="page-title fs-14"><i class="bi bi-key-fill"></i> Channel Access Token</h3>
