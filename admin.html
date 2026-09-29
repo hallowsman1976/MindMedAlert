@@ -4538,7 +4538,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedToken = sessionStorage.getItem('adminToken');
   if (sessionStorage.getItem('adminAuthed') === '1' && savedToken) {
     // เช็คกับเซิร์ฟเวอร์ว่า token ยังไม่หมดอายุจริงๆ ก่อนข้ามหน้า login (ไม่เชื่อ flag ฝั่ง client เฉยๆ)
-    apiCall('checkAdminToken', { token: savedToken }).then(res => {
+    // ลองซ้ำเมื่อเป็น error ชั่วคราว (เน็ตสะดุด / GAS cold start ตอบ HTML) — ล้าง session เฉพาะเมื่อเซิร์ฟเวอร์ตอบชัดเจนว่า token ไม่ผ่าน
+    const verifyToken = (attempt) => {
+      apiCall('checkAdminToken', { token: savedToken }).then(res => {
         if (res && res.success) {
           document.getElementById('loginScreen').classList.add('hidden');
           document.getElementById('appShell').classList.remove('hidden');
@@ -4547,11 +4549,15 @@ window.addEventListener('DOMContentLoaded', () => {
           clearAdminSession_();
           showLoginScreen_();
         }
-      })
-      .catch(() => {
-        clearAdminSession_();
-        showLoginScreen_();
+      }).catch(() => {
+        if (attempt < 3) {
+          setTimeout(() => verifyToken(attempt + 1), 1200 * attempt);
+        } else {
+          showLoginScreen_();
+        }
       });
+    };
+    verifyToken(1);
   } else {
     clearAdminSession_();
     showLoginScreen_();
